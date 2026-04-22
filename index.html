@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HH Surtido – Prototipo</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a1220;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:'Segoe UI',system-ui,sans-serif}
+.wrap{display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap;justify-content:center;padding:40px 20px}
+.phone{width:360px;height:780px;border-radius:38px;background:#111;box-shadow:0 0 0 2px #2a2a2a,0 0 0 9px #161616,0 40px 90px rgba(0,0,0,.7);overflow:hidden;position:relative;flex-shrink:0}
+.inner{width:100%;height:100%;overflow:hidden;position:relative;border-radius:30px;background:#fff}
+.screen{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s}
+.screen.gone{pointer-events:none;opacity:0;transform:translateX(100%)}
+.screen.back{pointer-events:none;opacity:0;transform:translateX(-28%)}
+.scroll{overflow-y:auto;overflow-x:hidden;flex:1}
+.sbar{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:11px;font-weight:600;flex-shrink:0}
+input:focus{outline:none}
+button:active{filter:brightness(.88)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState} = React;
+
+/* ── Colores ── */
+const C = {
+  navy:'#0d1f6e', blue:'#1976d2', blueBtn:'#1565c0',
+  red:'#e53935', green:'#43a047', yellow:'#f59e0b',
+  bg:'#ffffff', txt:'#1a1a2e', sub:'#757575', border:'#e0e0e0', dashed:'#64b5f6',
+};
+
+/* ── Pedidos colores ── */
+const PEDIDOS = {
+  P1:{color:'#1b7a3e', light:'#e8f5e9'},
+  P2:{color:'#1565c0', light:'#e3f2fd'},
+  P3:{color:'#6a1b9a', light:'#f3e5f5'},
+};
+
+/* ── Catálogo de productos ── */
+const PRODUCTS = [
+  {sku:'0486600', desc:'FILTRO DE ACEITE BOSCH 3323',        pasillo:18, torre:4, nivel:1, pedidos:{P1:11},     existencia:45,  stock:true },
+  {sku:'1365800', desc:'BUJÍA NGK BKR6E 4 PACK',             pasillo:18, torre:5, nivel:1, pedidos:{P1:7,P2:9}, existencia:8,   stock:false},
+  {sku:'2389475', desc:'CORREA SERPENTINA GATES K060882',     pasillo:18, torre:4, nivel:2, pedidos:{P1:8},      existencia:17,  stock:true },
+  {sku:'2948576', desc:'AMORTIGUADOR GABRIEL G63110',         pasillo:18, torre:5, nivel:1, pedidos:{P1:13},     existencia:6,   stock:false},
+  {sku:'3847561', desc:'BOBINA ENCENDIDO DELPHI GN10328',     pasillo:18, torre:5, nivel:1, pedidos:{P2:15},     existencia:33,  stock:true },
+  {sku:'4827361', desc:'PASTILLAS FRENO MONROE HX1052 DEL.',  pasillo:18, torre:5, nivel:1, pedidos:{P3:4},      existencia:22,  stock:true },
+  {sku:'7291834', desc:'FILTRO AIRE FRAM CA10440',            pasillo:18, torre:5, nivel:2, pedidos:{P2:6,P3:3}, existencia:50,  stock:true },
+  {sku:'1394001', desc:'CINTA AISLANTE SCOTCH 3/4" 20PZS',   pasillo:18, torre:5, nivel:1, pedidos:{P1:10},     existencia:100, stock:true },
+];
+
+/* ── Contenedores globales (mapeados a pedidos) ── */
+const CONTAINER_COLORS = { P1:'#1565c0', P2:'#2e7d32', P3:'#6a1b9a' };
+
+/* ── Estado inicial ── */
+const mkState = () => PRODUCTS.map(p => ({
+  pedStatus: Object.fromEntries(Object.keys(p.pedidos).map(k=>[k,'pending'])),
+  negado: false,
+}));
+
+/* ── Helpers ── */
+const SBar = ({light}) => (
+  <div className="sbar" style={{background:light?'#fff':C.navy, color:light?C.txt:'#fff'}}>
+    <span>9:30</span>
+    <div style={{display:'flex',gap:5,alignItems:'center'}}>
+      <svg width="13" height="10" viewBox="0 0 14 11"><path d="M7 1C4.6 1 2.4 2 .9 3.6L7 10l6.1-6.4C11.6 2 9.4 1 7 1z" fill="currentColor"/></svg>
+      <svg width="14" height="10" viewBox="0 0 16 12"><rect x="0" y="9" width="3" height="3" fill="currentColor"/><rect x="4" y="6" width="3" height="6" fill="currentColor"/><rect x="8" y="3" width="3" height="9" fill="currentColor"/><rect x="12" y="0" width="3" height="12" fill="currentColor"/></svg>
+      <svg width="22" height="10" viewBox="0 0 24 12"><rect x=".75" y="1" width="18.5" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/><rect x="2" y="2.5" width="14" height="7" rx="1" fill="currentColor"/><rect x="20" y="3.5" width="3" height="5" rx="1" fill="currentColor"/></svg>
+    </div>
+  </div>
+);
+
+/* ── Status icon SVG paths ── */
+const CHECK_PATH  = 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z';
+const CROSS_PATH  = 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z';
+const HALF_PATH   = 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.42 0 8 3.58 8 8s-3.58 8-8 8z';
+const PEND_PATH   = 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z';
+
+/* Calcula si un producto en estado `st` está: done/partial/pending/negado */
+function prodOverallStatus(st) {
+  if (st.negado) return 'negado';
+  const vals = Object.values(st.pedStatus);
+  if (vals.every(v=>v==='done')) return 'done';
+  if (vals.some(v=>v==='done')) return 'partial';
+  return 'pending';
+}
+
+/* ═══════════════════════════════════════
+   SCREEN 1 — Menú
+═══════════════════════════════════════ */
+function MenuScreen({nav}) {
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#fff'}}>
+      <SBar light/>
+      <div style={{background:C.navy,padding:'10px 16px',flexShrink:0}}>
+        <span style={{color:'#fff',fontWeight:700,fontSize:18}}>Menú</span>
+      </div>
+      <div style={{flex:1,padding:'12px',display:'flex',flexDirection:'column',gap:10,overflowY:'auto'}}>
+        {[
+          {label:'Tareas',             key:'tareas',    big:true},
+          {label:'Consulta de\ntareas cargadas', key:'consulta'},
+          {label:'Descarga de\nmercancía',       key:'descarga'},
+          {label:'Evidencias de\nenvíos',         key:'evidencias', badge:5},
+        ].map(it=>(
+          <button key={it.key} onClick={()=>it.key==='tareas'&&nav('asignacion')}
+            style={{background:it.big?C.blueBtn:C.blue,color:'#fff',border:'none',borderRadius:10,cursor:'pointer',
+              padding:it.big?'20px 16px':'16px 16px',display:'flex',alignItems:'center',
+              justifyContent:'space-between',fontSize:it.big?18:15,fontWeight:it.big?700:500,
+              boxShadow:'0 3px 8px rgba(0,0,0,.2)',whiteSpace:'pre-line',textAlign:'left'}}
+            onMouseDown={e=>e.currentTarget.style.transform='scale(.97)'}
+            onMouseUp={e=>e.currentTarget.style.transform='scale(1)'}
+          >
+            <span>{it.label}</span>
+            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+              {it.badge&&<div style={{background:C.red,color:'#fff',borderRadius:10,padding:'2px 7px',fontSize:11,fontWeight:700}}>+{it.badge}</div>}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 5l7 7-7 7" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/></svg>
+            </div>
+          </button>
+        ))}
+        <div style={{flex:1}}/>
+        <button onClick={()=>alert('Cerrando sesión...')}
+          style={{background:C.red,color:'#fff',border:'none',borderRadius:8,cursor:'pointer',padding:'14px',fontSize:15,fontWeight:700}}>
+          Salir
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════
+   SCREEN 2 — Asignación de tareas
+═══════════════════════════════════════ */
+function AsignacionScreen({nav}) {
+  const Field = ({label,icon,children}) => (
+    <div style={{marginBottom:12}}>
+      <div style={{background:C.navy,color:'#fff',padding:'6px 10px',borderRadius:'6px 6px 0 0',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
+        {icon&&<span style={{fontSize:13}}>{icon}</span>}{label}
+      </div>
+      <div style={{background:'#fff',border:`1.5px dashed ${C.dashed}`,borderTop:'none',borderRadius:'0 0 6px 6px',padding:'10px 12px',fontSize:13,color:C.txt}}>
+        {children}
+      </div>
+    </div>
+  );
+  const totalPzs = PRODUCTS.reduce((a,p)=>a+Object.values(p.pedidos).reduce((s,v)=>s+v,0),0);
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#fff'}}>
+      <SBar light/>
+      <div style={{background:C.blue,display:'flex',alignItems:'center',height:52,padding:'0 12px',flexShrink:0}}>
+        <button onClick={()=>nav('menu')} style={{background:'none',border:'none',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',gap:3,padding:'4px 0'}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="white"/></svg>
+          <span style={{color:'#fff',fontWeight:700,fontSize:16}}>Menú</span>
+        </button>
+        <div style={{flex:1,display:'flex',justifyContent:'center'}}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="rgba(255,255,255,.45)"><path d="M19 7h-1V5c0-2.2-1.8-4-4-4h-4C7.8 1 6 2.8 6 5v2H5c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM8 5c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2H8V5zm11 15H5V9h14v11z"/></svg>
+        </div>
+      </div>
+      <div style={{textAlign:'center',padding:'10px 14px 4px',flexShrink:0}}>
+        <span style={{fontSize:16,fontWeight:700,color:C.txt}}>Asignación de tareas</span>
+      </div>
+      <div style={{background:'#e8f0fe',borderBottom:'1px solid #c5cff5',padding:'7px 14px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+        <div style={{background:C.blueBtn,borderRadius:6,padding:'3px 9px',color:'#fff',fontSize:11,fontWeight:700}}>RONDA MULTI-PEDIDO</div>
+        <span style={{fontSize:12,color:C.navy,fontWeight:600}}>3 pedidos · {totalPzs} pzs</span>
+      </div>
+      <div className="scroll" style={{padding:'12px 14px'}}>
+        <Field label="Empleado" icon="👤">
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{background:C.navy,color:'#fff',borderRadius:6,padding:'3px 8px',fontSize:12,fontWeight:700}}>0029</div>
+            <span>JUAN ANTONIO GUERRERO MEDINA</span>
+          </div>
+        </Field>
+        <Field label="Tarea asignada" icon="☑️">
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{background:C.navy,color:'#fff',borderRadius:6,padding:'3px 8px',fontSize:12,fontWeight:700}}>9029</div>
+            <span>SURTIDO RONDA #4829</span>
+          </div>
+        </Field>
+        <Field label="Actividad" icon="📋"><span>SURTIR PEDIDO CLIENTE</span></Field>
+        <Field label="Fecha" icon="📅">
+          <div style={{fontSize:12,color:C.sub}}>Fecha Inicio: <b style={{color:C.txt}}>20/04/2026</b></div>
+          <div style={{fontSize:12,color:C.sub,marginTop:3}}>Hora Inicio: <b style={{color:C.txt}}>11:30 a.m.</b></div>
+        </Field>
+        <Field label="DocumentoID" icon="📄">SURTIR PEDIDO CLIENTE</Field>
+        <div style={{background:C.navy,borderRadius:10,padding:'12px 14px',marginTop:4}}>
+          <div style={{color:'rgba(255,255,255,.65)',fontSize:11,marginBottom:8,fontWeight:600,letterSpacing:.4}}>PEDIDOS EN RONDA</div>
+          {['P1','P2','P3'].map((p,i)=>{
+            const t = PRODUCTS.reduce((a,pr)=>a+(pr.pedidos[p]||0),0);
+            return (
+              <div key={p} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderTop:i>0?'1px solid rgba(255,255,255,.1)':undefined}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:26,height:26,borderRadius:6,background:PEDIDOS[p].color,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:700}}>{p}</div>
+                  <span style={{color:'rgba(255,255,255,.85)',fontSize:13}}>Pedido 1234{50+i}</span>
+                </div>
+                <span style={{color:'#7ec8e3',fontSize:13,fontWeight:600}}>{t} pzs</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{display:'flex',flexShrink:0}}>
+        <button onClick={()=>nav('menu')} style={{flex:1,background:C.red,color:'#fff',border:'none',padding:'17px',fontSize:22,cursor:'pointer',fontWeight:700}}>✕</button>
+        <button onClick={()=>nav('ronda')} style={{flex:1,background:C.green,color:'#fff',border:'none',padding:'17px',fontSize:22,cursor:'pointer',fontWeight:700}}>✓</button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════
+   SCREEN 3 — Surtido de órdenes
+═══════════════════════════════════════ */
+function RondaScreen({nav, surtidoState, setSurtidoState}) {
+  const [tab,       setTab]      = useState('ubicacion');
+  const [filter,    setFilter]   = useState('all');
+  const [scanFlash, setScanFlash]= useState(null);
+  const [cModal,    setCModal]   = useState(null); // {idx, pedidoKeys:[...]}
+  const [cScan,     setCScan]    = useState('');
+  const [scanInput, setScanInput]= useState('');
+
+  /* ── Counters for header card ── */
+  const completado = surtidoState.filter(s=>prodOverallStatus(s)==='done').length;
+  const negadoN    = surtidoState.filter(s=>s.negado).length;
+  const parcialN   = surtidoState.filter(s=>prodOverallStatus(s)==='partial').length;
+  const pendientes = PRODUCTS.length - completado - negadoN - parcialN;
+
+  /* ── Handle scan circle click ── */
+  const handleScan = (i) => {
+    const st = surtidoState[i];
+    if (st.negado || prodOverallStatus(st)==='done') return;
+    // If in Por pedido with filter, mark only that pedido
+    if (tab==='pedido' && filter!=='all') {
+      if (st.pedStatus[filter]==='done') return;
+      setScanFlash(i);
+      setTimeout(()=>{ setScanFlash(null); markPedido(i, filter); }, 700);
+      return;
+    }
+    setScanFlash(i);
+    setTimeout(()=>{
+      setScanFlash(null);
+      const prod = PRODUCTS[i];
+      const allPeds = Object.keys(prod.pedidos);
+      const pendingPeds = allPeds.filter(k=>st.pedStatus[k]==='pending');
+      if (pendingPeds.length === 0) return;
+      if (allPeds.length === 1 || pendingPeds.length === 1) {
+        // single pedido pending → mark done directly
+        markPedido(i, pendingPeds[0]);
+      } else {
+        // multiple pedidos pending → show container modal with done/pending state
+        setCModal({idx:i, pedidoKeys: allPeds, pendingPeds});
+      }
+    }, 700);
+  };
+
+  const markPedido = (i, pedKey) => {
+    setSurtidoState(prev => prev.map((s,si) => {
+      if (si !== i) return s;
+      return { ...s, pedStatus: { ...s.pedStatus, [pedKey]: 'done' } };
+    }));
+  };
+
+  const confirmContainer = (pedKey) => {
+    markPedido(cModal.idx, pedKey);
+    setCModal(null); setCScan('');
+  };
+
+  /* ── Filtered list ── */
+  const filteredRows = PRODUCTS
+    .map((p,i)=>({p,i}))
+    .filter(({p}) => {
+      if (tab === 'pedido' && filter !== 'all') return p.pedidos[filter] !== undefined;
+      return true;
+    });
+
+  /* ── Per-pedido badge in row ── */
+  const PedBadge = ({pedKey, status}) => {
+    const col = PEDIDOS[pedKey].color;
+    const isDone   = status === 'done';
+    const isPend   = status === 'pending';
+    const isNeg    = status === 'negado';
+    const iconPath = isDone ? CHECK_PATH : isNeg ? CROSS_PATH : CROSS_PATH;
+    const iconCol  = isDone ? '#fff' : '#fff';
+    const bg       = isDone ? col : isPend ? '#e0e0e0' : C.red;
+    return (
+      <div style={{display:'flex',borderRadius:4,overflow:'hidden',border:`1px solid ${isDone?col:isPend?C.border:C.red}`,flexShrink:0}}>
+        <div style={{background:bg,color:'#fff',padding:'2px 5px',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',gap:2}}>
+          {pedKey}
+          {!isPend && (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill={iconCol}>
+              <path d={isDone ? CHECK_PATH : CROSS_PATH}/>
+            </svg>
+          )}
+        </div>
+        <div style={{padding:'2px 5px',fontSize:9,fontWeight:600,color:isDone?col:C.sub,background:'#fff'}}>
+          {PRODUCTS.find((_,ii)=>ii!==-1)&&PRODUCTS.filter(pr=>pr.pedidos[pedKey])[0]?.pedidos[pedKey]||'?'} pzs
+        </div>
+      </div>
+    );
+  };
+
+  /* ── Per-pedido badge — cleaner approach ── */
+  const PedidoBadge = ({prod, i, pedKey}) => {
+    const status = surtidoState[i]?.pedStatus?.[pedKey] || 'pending';
+    const qty    = prod.pedidos[pedKey];
+    const col    = PEDIDOS[pedKey].color;
+    const isDone = status === 'done';
+    const isNeg  = status === 'negado';
+    const isPend = status === 'pending';
+    return (
+      <div style={{display:'inline-flex',borderRadius:5,overflow:'hidden',border:`1px solid ${isDone?col:isPend?'#bdbdbd':C.red}`,marginRight:4,marginBottom:2}}>
+        {/* Pedido label + status icon */}
+        <div style={{background:isDone?col:isPend?'#757575':C.red,color:'#fff',padding:'2px 5px',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',gap:2}}>
+          {pedKey}
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="white">
+            <path d={isDone ? CHECK_PATH : isPend ? PEND_PATH : CROSS_PATH}/>
+          </svg>
+        </div>
+        {/* Qty */}
+        <div style={{padding:'2px 5px',fontSize:9,fontWeight:600,background:'#fff',color:isDone?col:C.sub}}>
+          {qty} pzs
+        </div>
+      </div>
+    );
+  };
+
+  /* ── Overall row circle icon ── */
+  const CircleIcon = ({st, scanning}) => {
+    const status = prodOverallStatus(st);
+    const bg = scanning ? C.yellow :
+               status==='done'    ? C.green :
+               status==='negado'  ? C.red :
+               status==='partial' ? C.blueBtn :
+               '#e8eef8';
+    const border = scanning ? C.yellow :
+                   status==='done'   ? C.green :
+                   status==='negado' ? C.red :
+                   status==='partial'? C.blueBtn :
+                   C.blue;
+    const iconPath = status==='done'   ? CHECK_PATH :
+                     status==='negado' ? CROSS_PATH :
+                     status==='partial'? HALF_PATH  : null;
+    return (
+      <div style={{width:34,height:34,borderRadius:'50%',background:bg,border:`2px solid ${border}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .25s'}}>
+        {iconPath
+          ? <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d={iconPath}/></svg>
+          : scanning
+            ? <svg width="15" height="15" viewBox="0 0 24 24" fill={C.navy}><path d="M1 5h2v14H1zm3 0h1v14H4zm2 0h2v14H6zm3 0h1v14H9zm2 0h2v14h-2zm3 0h1v14h-1zm2 0h2v14h-2z"/></svg>
+            : <svg width="15" height="15" viewBox="0 0 24 24" fill={C.blue}><path d="M1 5h2v14H1zm3 0h1v14H4zm2 0h2v14H6zm3 0h1v14H9zm2 0h2v14h-2zm3 0h1v14h-1zm2 0h2v14h-2z"/></svg>
+        }
+      </div>
+    );
+  };
+
+  /* ── Status icon for header card ── */
+  const HeaderIcon = ({type, count}) => {
+    const cfg = {
+      completado:{bg:C.green,  path:CHECK_PATH},
+      negado:    {bg:C.red,    path:CROSS_PATH},
+      parcial:   {bg:C.blueBtn,path:HALF_PATH},
+      pendientes:{bg:C.yellow, path:PEND_PATH},
+    }[type];
+    return (
+      <div style={{flex:1,textAlign:'center'}}>
+        <div style={{fontSize:10,color:'rgba(255,255,255,.7)',marginBottom:5,textTransform:'capitalize'}}>{type}</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+          <div style={{width:28,height:28,borderRadius:'50%',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d={cfg.path}/></svg>
+          </div>
+          <span style={{color:'#fff',fontWeight:700,fontSize:17}}>{count}</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#fff',position:'relative'}}>
+      <SBar light/>
+
+      {/* Header azul */}
+      <div style={{background:C.blue,display:'flex',alignItems:'center',height:52,padding:'0 12px',flexShrink:0}}>
+        <button onClick={()=>nav('asignacion')} style={{background:'none',border:'none',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',gap:3}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="white"/></svg>
+          <span style={{color:'#fff',fontWeight:700,fontSize:16}}>Menú</span>
+        </button>
+        <div style={{flex:1,display:'flex',justifyContent:'center'}}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="rgba(255,255,255,.45)"><path d="M19 7h-1V5c0-2.2-1.8-4-4-4h-4C7.8 1 6 2.8 6 5v2H5c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM8 5c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2H8V5zm11 15H5V9h14v11z"/></svg>
+        </div>
+        <button style={{width:34,height:34,borderRadius:'50%',background:'rgba(255,255,255,.18)',border:'none',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+        </button>
+      </div>
+
+      {/* Title */}
+      <div style={{textAlign:'center',padding:'10px 16px 7px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        <span style={{fontWeight:700,fontSize:17,color:C.txt}}>Surtido de órdenes</span>
+      </div>
+
+      {/* Avance del pedido card */}
+      <div style={{margin:'10px 12px 0',borderRadius:8,overflow:'hidden',border:`1px solid ${C.navy}`,flexShrink:0}}>
+        <div style={{background:C.navy,padding:'7px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="white"><path d={CHECK_PATH}/></svg>
+            <span style={{color:'#fff',fontSize:12,fontWeight:600}}>Avance del pedido</span>
+          </div>
+          <div style={{background:C.blue,borderRadius:5,padding:'2px 8px',color:'#fff',fontSize:11,fontWeight:700}}>
+            {tab==='pedido'&&filter!=='all' ? `Pedido ${filter}` : 'Múltiples pedidos'}
+          </div>
+        </div>
+        <div style={{background:C.navy,padding:'8px 6px 12px',display:'flex',borderTop:'1px solid rgba(255,255,255,.12)'}}>
+          <HeaderIcon type="completado" count={completado}/>
+          <HeaderIcon type="negado"     count={negadoN}/>
+          <HeaderIcon type="parcial"    count={parcialN}/>
+          <HeaderIcon type="pendientes" count={pendientes}/>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,margin:'10px 0 0',flexShrink:0}}>
+        {[['ubicacion','Surtido múltiple'],['pedido','Por pedido'],['contenedor','Contenedor']].map(([id,lbl])=>(
+          <button key={id} onClick={()=>{setTab(id);if(id!=='pedido')setFilter('all');}} style={{
+            flex:1,background:'none',border:'none',cursor:'pointer',
+            padding:'9px 2px',fontSize:12,fontWeight:tab===id?700:500,
+            color:tab===id?C.blue:C.sub,
+            borderBottom:`2.5px solid ${tab===id?C.blue:'transparent'}`,
+          }}>{lbl}</button>
+        ))}
+      </div>
+
+      {/* Por pedido filter buttons */}
+      {tab==='pedido' && (
+        <div style={{padding:'7px 12px',display:'flex',gap:6,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+          {['all','P1','P2','P3'].map(f=>(
+            <button key={f} onClick={()=>setFilter(f)} style={{
+              background:filter===f?C.blue:'#f0f2f5', color:filter===f?'#fff':C.sub,
+              border:'none', borderRadius:6, padding:'4px 12px', fontSize:11, fontWeight:600, cursor:'pointer',
+            }}>{f==='all'?'Todos':f}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Contenedor tab */}
+      {tab==='contenedor'
+        ? <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14,color:C.sub,padding:'20px'}}>
+            <span style={{fontSize:14,fontWeight:700,color:C.txt}}>Contenedores activos</span>
+            <div style={{display:'flex',gap:12}}>
+              {['P1','P2','P3'].map((p,ii)=>(
+                <div key={p} style={{background:CONTAINER_COLORS[p],borderRadius:10,padding:'14px 18px',color:'#fff',textAlign:'center',minWidth:80}}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style={{display:'block',margin:'0 auto 6px'}}><path d="M20 6h-2.18c.07-.44.18-.88.18-1.35C18 2.53 15.49.02 12.35.02c-1.71 0-3.28.76-4.35 1.97L12 6 7.65 5.99C6.58 4.78 5.01 4.02 3.35 4.02 1.67 4.02 0 5.7 0 7.38v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8l2-2h-2z"/></svg>
+                  <div style={{fontSize:11,fontWeight:700}}>C-00{ii+1}</div>
+                  <div style={{fontSize:10,opacity:.8,marginTop:2}}>{p}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        /* Product list */
+        : <div className="scroll">
+            {filteredRows.map(({p:prod, i}) => {
+              const st = surtidoState[i];
+              const overallSt = prodOverallStatus(st);
+              const scanning  = scanFlash === i;
+              const tot = Object.values(prod.pedidos).reduce((a,v)=>a+v,0);
+              const doneQty = Object.entries(prod.pedidos)
+                .filter(([k])=>st.pedStatus[k]==='done')
+                .reduce((a,[,v])=>a+v,0);
+
+              return (
+                <div key={prod.sku+tab+filter} style={{
+                  display:'flex', alignItems:'center', padding:'11px 12px',
+                  borderBottom:`1px solid ${C.border}`,
+                  background: scanning?'#fff9c4' : overallSt==='done'?'#f1faf2' : overallSt==='negado'?'#fff1f1' : overallSt==='partial'?'#f0f4ff' : '#fff',
+                  transition:'background .3s',
+                }}>
+                  {/* Scan circle */}
+                  <button
+                    onClick={()=>handleScan(i)}
+                    disabled={overallSt==='done'||st.negado}
+                    style={{flexShrink:0,marginRight:10,background:'none',border:'none',cursor:overallSt==='done'||st.negado?'default':'pointer',padding:0}}
+                  >
+                    <CircleIcon st={st} scanning={scanning}/>
+                  </button>
+
+                  {/* Info */}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                      <span style={{fontWeight:700,fontSize:15,color:st.negado?C.red:C.txt}}>{prod.sku}</span>
+                      {!prod.stock && <span style={{background:'#ffebee',color:C.red,fontSize:9,fontWeight:700,borderRadius:3,padding:'1px 5px',border:'1px solid #ffcdd2'}}>STOCK!</span>}
+                    </div>
+                    <div style={{fontSize:10,color:C.sub,marginBottom:4}}>Planta Baja | Pas {prod.pasillo} | Torre {prod.torre} | Niv {prod.nivel}</div>
+                    {/* Per-pedido badges — si hay filtro activo, solo mostrar ese pedido */}
+                    <div style={{display:'flex',flexWrap:'wrap',gap:2}}>
+                      {Object.keys(prod.pedidos)
+                        .filter(pk => tab==='pedido' && filter!=='all' ? pk===filter : true)
+                        .map(pk=>(
+                          <PedidoBadge key={pk} prod={prod} i={i} pedKey={pk}/>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Overall qty badge + detail chevron */}
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:8}}>
+                    <div style={{
+                      background: overallSt==='done'?'#e8f5e9' : overallSt==='negado'?'#ffebee' : overallSt==='partial'?'#e3f2fd' : '#fff3cd',
+                      color:      overallSt==='done'?'#2e7d32' : overallSt==='negado'?C.red      : overallSt==='partial'?C.blueBtn : '#856404',
+                      border:`1px solid ${overallSt==='done'?'#a5d6a7':overallSt==='negado'?'#ffcdd2':overallSt==='partial'?'#90caf9':'#ffc107'}`,
+                      borderRadius:6, padding:'3px 7px', fontSize:11, fontWeight:700, minWidth:52, textAlign:'center',
+                    }}>
+                      {doneQty} de {tot}
+                    </div>
+                    <button onClick={()=>nav('producto',{idx:i})}
+                      style={{width:32,height:32,borderRadius:'50%',background:C.blue,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M8 5l7 7-7 7" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+      }
+
+      {/* Scan bar */}
+      <div style={{background:'#fff',borderTop:`1px solid ${C.border}`,padding:'8px 10px',display:'flex',gap:8,alignItems:'center',flexShrink:0}}>
+        <div style={{width:44,height:44,background:'#1a1a2e',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M1 5h2v14H1zm3 0h1v14H4zm2 0h2v14H6zm3 0h1v14H9zm2 0h2v14h-2zm3 0h1v14h-1zm2 0h2v14h-2zm3 0h1v14h-1zm2 0h2v14h-2z"/></svg>
+        </div>
+        <input value={scanInput} onChange={e=>setScanInput(e.target.value)}
+          onKeyDown={e=>{
+            if(e.key==='Enter'&&scanInput.trim()){
+              const idx=PRODUCTS.findIndex(p=>p.sku===scanInput.trim());
+              if(idx>=0) handleScan(idx);
+              setScanInput('');
+            }
+          }}
+          placeholder=""
+          style={{flex:1,height:44,border:`1px solid ${C.border}`,borderRadius:6,padding:'0 10px',fontSize:13,background:'#fff'}}
+        />
+      </div>
+
+      {/* Container modal */}
+      {cModal && (
+        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'flex-end',zIndex:200}}>
+          <div style={{background:'#fff',borderRadius:'16px 16px 0 0',width:'100%',padding:'20px 16px 28px'}}>
+            <div style={{width:36,height:4,background:C.border,borderRadius:2,margin:'0 auto 14px'}}/>
+            <div style={{fontWeight:700,fontSize:16,color:C.txt,marginBottom:3}}>¿A qué contenedor?</div>
+            <div style={{fontSize:12,color:C.sub,marginBottom:4}}>
+              <b style={{color:C.txt}}>{PRODUCTS[cModal.idx].sku}</b> tiene piezas para múltiples pedidos.
+            </div>
+            <div style={{fontSize:12,color:C.sub,marginBottom:14}}>
+              Selecciona el contenedor destino — el otro pedido queda <b>pendiente</b> en ronda.
+            </div>
+            {/* Container options — one per pedido, disable if already done */}
+            <div style={{display:'flex',gap:10,marginBottom:16}}>
+              {cModal.pedidoKeys.map((pk,ii)=>{
+                const isDonePed = !cModal.pendingPeds?.includes(pk);
+                return (
+                  <button key={pk}
+                    onClick={()=>!isDonePed && confirmContainer(pk)}
+                    disabled={isDonePed}
+                    style={{
+                      flex:1, border:'none', borderRadius:10, padding:'14px 6px',
+                      cursor: isDonePed?'not-allowed':'pointer', textAlign:'center',
+                      background: isDonePed ? '#e0e0e0' : CONTAINER_COLORS[pk],
+                      color: isDonePed ? '#9e9e9e' : '#fff',
+                      position:'relative', opacity: isDonePed ? 0.75 : 1,
+                    }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill={isDonePed?'#9e9e9e':'white'} style={{display:'block',margin:'0 auto 5px'}}><path d="M20 6h-2.18c.07-.44.18-.88.18-1.35C18 2.53 15.49.02 12.35.02c-1.71 0-3.28.76-4.35 1.97L12 6 7.65 5.99C6.58 4.78 5.01 4.02 3.35 4.02 1.67 4.02 0 5.7 0 7.38v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8l2-2h-2z"/></svg>
+                    <div style={{fontSize:13,fontWeight:800}}>C-00{ii+1}</div>
+                    <div style={{fontSize:10,marginTop:2,opacity:.9}}>Pedido {pk}</div>
+                    <div style={{fontSize:10,opacity:.8}}>{PRODUCTS[cModal.idx].pedidos[pk]} pzs</div>
+                    {isDonePed && (
+                      <div style={{marginTop:5,background:'#43a047',borderRadius:4,padding:'2px 6px',color:'#fff',fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',gap:3}}>
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d={CHECK_PATH}/></svg>
+                        LLENO
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Scan input */}
+            <div style={{display:'flex',gap:8,marginBottom:10}}>
+              <div style={{width:42,height:42,background:C.navy,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="white"><path d="M1 5h2v14H1zm3 0h1v14H4zm2 0h2v14H6zm3 0h1v14H9zm2 0h2v14h-2zm3 0h1v14h-1zm2 0h2v14h-2z"/></svg>
+              </div>
+              <input value={cScan} onChange={e=>setCScan(e.target.value)}
+                onKeyDown={e=>{
+                  if(e.key==='Enter'&&cScan.trim()){
+                    // try to match container id
+                    const matched = cModal.pedidoKeys.find((_,ii)=>cScan.toUpperCase()===`C-00${ii+1}`);
+                    if(matched) confirmContainer(matched);
+                    else confirmContainer(cModal.pedidoKeys[0]);
+                  }
+                }}
+                placeholder="Escanear ID de contenedor..."
+                autoFocus
+                style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 12px',fontSize:13,background:'#f9fafb'}}
+              />
+            </div>
+            <button onClick={()=>{setCModal(null);setCScan('');}}
+              style={{width:'100%',background:'#f0f2f5',border:'none',borderRadius:8,padding:'11px',fontSize:13,color:C.sub,cursor:'pointer',fontWeight:600}}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════
+   SCREEN 4 — Detalle del producto
+═══════════════════════════════════════ */
+function ProductoScreen({nav, idx, surtidoState, setSurtidoState}) {
+  const prod = PRODUCTS[idx] || PRODUCTS[0];
+  const st   = surtidoState[idx] || {pedStatus:{},negado:false};
+  const sol  = Object.values(prod.pedidos).reduce((a,v)=>a+v,0);
+  const [qty,    setQty]    = useState(sol);
+  const [negado, setNegado] = useState(false);
+
+  const save = () => {
+    const u = [...surtidoState];
+    const newPedStatus = {...st.pedStatus};
+    // Mark all pedidos as done if qty >= sol
+    if (qty >= sol) Object.keys(prod.pedidos).forEach(k=>newPedStatus[k]='done');
+    u[idx] = {...st, pedStatus: newPedStatus};
+    setSurtidoState(u); nav('ronda');
+  };
+  const negar = () => {
+    setNegado(true);
+    const u = [...surtidoState];
+    u[idx] = {...st, negado:true};
+    setSurtidoState(u);
+    setTimeout(()=>nav('ronda'), 600);
+  };
+
+  const FP = ({l1,v1,l2,v2}) => (
+    <div style={{display:'flex',gap:10,marginBottom:10}}>
+      {[[l1,v1],[l2,v2]].map(([l,v],i)=>(
+        <div key={i} style={{flex:1,display:'flex',borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
+          <div style={{background:C.blue,color:'#fff',padding:'8px 10px',fontSize:12,fontWeight:600,flexShrink:0}}>{l}</div>
+          <div style={{flex:1,padding:'8px 10px',fontSize:13,color:C.txt,background:'#fff'}}>{v}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#fff'}}>
+      <SBar light/>
+      <div style={{background:C.blue,display:'flex',alignItems:'center',height:52,padding:'0 12px',flexShrink:0}}>
+        <button onClick={()=>nav('ronda')} style={{background:'none',border:'none',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center'}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="white"/></svg>
+        </button>
+        <div style={{flex:1,display:'flex',justifyContent:'center'}}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="rgba(255,255,255,.5)"><path d="M19 7h-1V5c0-2.2-1.8-4-4-4h-4C7.8 1 6 2.8 6 5v2H5c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM8 5c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2H8V5zm11 15H5V9h14v11z"/></svg>
+        </div>
+      </div>
+      <div className="scroll" style={{padding:'14px'}}>
+        <div style={{textAlign:'center',fontWeight:700,fontSize:17,color:C.txt,marginBottom:14,paddingBottom:12,borderBottom:`1px solid ${C.border}`}}>
+          Detalle del producto
+        </div>
+        <div style={{display:'flex',gap:10,marginBottom:12}}>
+          <div style={{width:110,height:110,borderRadius:10,border:`2px solid ${C.blue}`,overflow:'hidden',flexShrink:0,background:'#eef2ff',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
+            <svg width="110" height="110" viewBox="0 0 110 110" style={{position:'absolute',inset:0}}>
+              {Array.from({length:14},(_,i)=><line key={i} x1={i*9-10} y1="0" x2={i*9+110} y2="110" stroke="#c7d0e8" strokeWidth="5"/>)}
+            </svg>
+            <div style={{position:'relative',textAlign:'center'}}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill={C.blue} style={{opacity:.4}}><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 14H6l3-4 2 3 3-4 4 5z"/></svg>
+              <div style={{fontSize:8,color:'#7b8dc4'}}>imagen</div>
+            </div>
+          </div>
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:8}}>
+            <div style={{display:'flex',borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
+              <div style={{background:C.blue,color:'#fff',padding:'8px 10px',fontSize:12,fontWeight:600,flexShrink:0}}>Código</div>
+              <div style={{flex:1,padding:'8px 10px',fontSize:13,color:C.txt,fontWeight:600}}>{prod.sku}</div>
+            </div>
+            <div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 10px',fontSize:12,color:C.txt,lineHeight:1.4}}>{prod.desc}</div>
+          </div>
+        </div>
+        <FP l1="Ubicación" v1="Planta baja" l2="Pasillo" v2={prod.pasillo}/>
+        <FP l1="Torre"     v1={prod.torre}   l2="Nivel"   v2={prod.nivel}/>
+        <FP l1="Existencia" v1={prod.existencia} l2="Solicitado" v2={sol}/>
+        {/* Per-pedido status */}
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',marginBottom:12}}>
+          <div style={{fontSize:11,color:C.sub,fontWeight:600,marginBottom:8}}>ESTADO POR PEDIDO</div>
+          {Object.entries(prod.pedidos).map(([pk,qty2])=>{
+            const pSt = st.pedStatus?.[pk]||'pending';
+            const col = PEDIDOS[pk].color;
+            return (
+              <div key={pk} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderTop:'1px solid #f0f0f0'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:28,height:28,borderRadius:6,background:col,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:700}}>{pk}</div>
+                  <span style={{fontSize:13,color:C.txt}}>{qty2} pzs requeridas</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:5}}>
+                  <div style={{width:22,height:22,borderRadius:'50%',background:pSt==='done'?C.green:pSt==='negado'?C.red:'#e0e0e0',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                      <path d={pSt==='done'?CHECK_PATH:pSt==='negado'?CROSS_PATH:PEND_PATH}/>
+                    </svg>
+                  </div>
+                  <span style={{fontSize:11,color:pSt==='done'?C.green:pSt==='negado'?C.red:C.sub,fontWeight:600}}>
+                    {pSt==='done'?'Completo':pSt==='negado'?'Negado':'Pendiente'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontWeight:700,fontSize:14,color:C.txt,marginBottom:10}}>Cantidad surtida:</div>
+          <div style={{display:'flex',borderRadius:10,overflow:'hidden',border:`1px solid ${C.border}`}}>
+            <button onClick={()=>setQty(q=>Math.max(0,q-1))}
+              style={{width:52,height:52,background:C.blue,border:'none',color:'#fff',fontSize:24,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+            <div style={{flex:1,textAlign:'center',fontSize:18,fontWeight:700,color:C.txt,background:'#fff',height:52,display:'flex',alignItems:'center',justifyContent:'center'}}>{qty}</div>
+            <button onClick={()=>setQty(q=>Math.min(prod.existencia,q+1))}
+              style={{width:52,height:52,background:qty>=sol?'#bdbdbd':C.blue,border:'none',color:'#fff',fontSize:24,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+          </div>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:10,padding:'12px',flexShrink:0,background:'#fff',borderTop:`1px solid ${C.border}`}}>
+        <button onClick={save} style={{flex:1,background:C.blue,color:'#fff',border:'none',borderRadius:10,padding:'14px',fontSize:14,fontWeight:700,cursor:'pointer'}}>Regresar</button>
+        <button onClick={negar} style={{flex:1,background:negado?C.red:C.blue,color:'#fff',border:'none',borderRadius:10,padding:'14px',fontSize:14,fontWeight:700,cursor:'pointer',transition:'background .3s'}}>
+          {negado?'✕ Negado':'Negar producto'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════
+   ROOT
+═══════════════════════════════════════ */
+function App() {
+  const saved = ()=>{try{return JSON.parse(localStorage.getItem('hh4')||'{}')}catch{return{}}};
+  const s = saved();
+  const [screen,       setScreen]       = useState(s.screen||'menu');
+  const [params,       setParams]       = useState(s.params||{});
+  const [surtidoState, setSurtidoState] = useState(mkState());
+
+  const nav = (sc, p={}) => {
+    setScreen(sc); setParams(p);
+    localStorage.setItem('hh4', JSON.stringify({screen:sc, params:p}));
+  };
+  const common = {nav, surtidoState, setSurtidoState};
+  const screens = {
+    menu:      <MenuScreen      {...common}/>,
+    asignacion:<AsignacionScreen {...common}/>,
+    ronda:     <RondaScreen     {...common}/>,
+    producto:  <ProductoScreen  {...common} idx={params.idx||0}/>,
+  };
+  const order = ['menu','asignacion','ronda','producto'];
+  const ci = order.indexOf(screen);
+
+  return (
+    <div className="wrap">
+      <div className="phone">
+        <div className="inner">
+          {order.map((sc,si)=>(
+            <div key={sc} className={`screen${sc===screen?'':si<ci?' back':' gone'}`}>
+              {screens[sc]}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{color:'rgba(255,255,255,.5)',fontSize:12,maxWidth:210,lineHeight:1.8}}>
+        <div style={{color:'rgba(255,255,255,.8)',fontWeight:700,marginBottom:10,fontSize:13}}>Flujo</div>
+        {[
+          ['1','Menú','→ Toca Tareas'],
+          ['2','Asignación de tareas','→ Confirma ✓'],
+          ['3','Surtido de órdenes','Círculo = escanear producto'],
+          ['4','Detalle de producto','Ver estado por pedido'],
+        ].map(([n,t,h])=>(
+          <div key={n} style={{display:'flex',gap:8,marginBottom:7}}>
+            <div style={{width:20,height:20,borderRadius:'50%',background:C.blue,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{n}</div>
+            <div><div style={{color:'rgba(255,255,255,.85)',fontWeight:600}}>{t}</div><div style={{fontSize:11}}>{h}</div></div>
+          </div>
+        ))}
+        <div style={{marginTop:10,padding:'10px',background:'rgba(255,255,255,.07)',borderRadius:8,fontSize:11,lineHeight:1.7}}>
+          💡 SKU <b style={{color:'#7ec8e3'}}>1365800</b> y <b style={{color:'#7ec8e3'}}>7291834</b> tienen 2 pedidos — toca su círculo para ver el modal de contenedor.<br/><br/>
+          Tab "Por pedido" → selecciona P1/P2/P3 para filtrar solo sus artículos.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
